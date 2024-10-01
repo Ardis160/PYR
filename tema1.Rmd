@@ -1,0 +1,32 @@
+library(dplyr)
+library(ggplot2)
+library(readxl)
+library(RCzechia)
+
+obyvatelstvo <- read_excel("demogr.xlsx", sheet = "Obyvatelstvo", skip = 1) %>% slice(-1) %>%
+  mutate(`Název kraje` = str_remove(`Název kraje`, "(?i)\\s*kraj\\s*")) %>%
+  rename(Kód = `Zpět na obsah`)
+
+sportovci <- read_excel("sportovci.xlsx")
+organizace <- read_excel("organizace.xlsx")
+
+sportovci_organizace <- left_join(organizace, sportovci, by = "IČO") %>%  group_by(`Kraj`) %>%
+  summarise(pocet_sportovcu = sum(`Počet sportovců`, na.rm = TRUE))
+
+obyvatelstvo_SO <-left_join(obyvatelstvo, sportovci_organizace, by = c("Název kraje" = "Kraj"))
+
+obyvatelstvo_SO <- obyvatelstvo_SO %>%
+  mutate(sportovci_na_obyvatele = `pocet_sportovcu` / `2023`)
+
+mapa <- kraje("low")
+
+mapa_sportovci <- mapa %>%
+  left_join(obyvatelstvo_SO, by = c("KOD_CZNUTS3" = "Kód"))
+
+
+ggplot(mapa_sportovci) +
+  geom_sf(aes(fill = sportovci_na_obyvatele)) +
+  scale_fill_gradient(low = "#132b43", high = "#56b1f7") +
+  labs(title = "Počet sportovců na obyvatele v jednotlivých krajích ČR",
+       fill = "pocet")
+
