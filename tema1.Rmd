@@ -1,6 +1,7 @@
 library(dplyr)
 library(ggplot2)
 library(readxl)
+library(stringr)
 library(RCzechia)
 
 obyvatelstvo <- read_excel("demogr.xlsx", sheet = "Obyvatelstvo", skip = 1) %>% slice(-1) %>%
@@ -30,3 +31,29 @@ ggplot(mapa_sportovci) +
   labs(title = "Počet sportovců na obyvatele v jednotlivých krajích ČR",
        fill = "pocet")
 
+organizace_overeno <- organizace %>% filter(`Stav` == "Ověřeno")    
+
+organizace_top4 <- organizace_overeno %>%
+  count(`Právní forma`, sort = TRUE) %>%
+  top_n(4, wt = n)
+
+# Zobrazení výsledku - 4 nejčastější právní formy
+print(organizace_top4)
+
+
+sportovci_filtered <- sportovci  %>% filter(between(`Počet sportovců`, 1, 10000)) %>% filter(between(`Počet trenérů`, 1, 5000))
+
+lr_model <- inner_join(sportovci_filtered, organizace_overeno, by = "IČO")
+
+
+# Aplikace lineárního regresního modelu
+model <- lm(`Počet sportovců` ~ `Počet trenérů`, data = lr_model)
+summary(model)
+
+# Přidání regresní přímky do grafu
+ggplot(lr_model, aes(x = `Počet trenérů`, y = `Počet sportovců`)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Závislost počtu sportovců na počtu trenérů",
+       x = "Počet trenérů",
+       y = "Počet sportovců")
