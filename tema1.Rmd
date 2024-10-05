@@ -3,6 +3,10 @@ library(ggplot2)
 library(readxl)
 library(stringr)
 library(RCzechia)
+library(RColorBrewer)
+
+
+#Úkol 1
 
 obyvatelstvo <- read_excel("demogr.xlsx", sheet = "Obyvatelstvo", skip = 1) %>% slice(-1) %>%
   mutate(`Název kraje` = str_remove(`Název kraje`, "(?i)\\s*kraj\\s*")) %>%
@@ -11,10 +15,12 @@ obyvatelstvo <- read_excel("demogr.xlsx", sheet = "Obyvatelstvo", skip = 1) %>% 
 sportovci <- read_excel("sportovci.xlsx")
 organizace <- read_excel("organizace.xlsx")
 
-sportovci_organizace <- left_join(organizace, sportovci, by = "IČO") %>%  group_by(`Kraj`) %>%
+sportovci_organizace <-left_join(organizace, 
+                        sportovci %>% select(IČO, `Počet sportovců`, `Počet trenérů`), 
+                        by = "IČO") %>%  group_by(`Kraj`) %>%
   summarise(pocet_sportovcu = sum(`Počet sportovců`, na.rm = TRUE))
 
-obyvatelstvo_SO <-left_join(obyvatelstvo, sportovci_organizace, by = c("Název kraje" = "Kraj"))
+obyvatelstvo_SO <-inner_join(obyvatelstvo, sportovci_organizace, by = c("Název kraje" = "Kraj"))
 
 obyvatelstvo_SO <- obyvatelstvo_SO %>%
   mutate(sportovci_na_obyvatele = `pocet_sportovcu` / `2023`)
@@ -31,24 +37,71 @@ ggplot(mapa_sportovci) +
   labs(title = "Počet sportovců na obyvatele v jednotlivých krajích ČR",
        fill = "pocet")
 
+
+#Úkol 2
+
+#Otázka 1
 organizace_overeno <- organizace %>% filter(`Stav` == "Ověřeno")    
 
 organizace_top4 <- organizace_overeno %>%
   count(`Právní forma`, sort = TRUE) %>%
-  top_n(4, wt = n)
+  top_n(4) %>% rename(`Celkový počet` = n)
 
-# Zobrazení výsledku - 4 nejčastější právní formy
-print(organizace_top4)
+poradi_kraje <- organizace_overeno %>%
+  filter(`Právní forma` %in% organizace_top4$`Právní forma`) %>%
+  group_by(Kraj, `Právní forma`) %>%
+  summarise(pocet = n()) %>%
+  arrange(Kraj, desc(pocet))
 
 
+#Otázka 2
+top_organizace <- organizace_top4 %>% top_n(1) 
+so_overeno <- left_join(organizace_overeno, 
+                        sportovci %>% select(IČO, `Počet sportovců`, `Počet trenérů`), 
+                        by = "IČO")
+podil_sportovci <- inner_join(top_organizace, so_overeno) %>% filter(`Počet sportovců` > 0) %>% filter(`Počet trenérů` == 0) %>%
+  nrow()
+podil_treneri <- inner_join(top_organizace, so_overeno) %>% filter(`Počet sportovců` == 0) %>% filter(`Počet trenérů` > 0) %>%
+  nrow()
+celkovy_pocet <- top_organizace$`Celkový počet`
+
+podily <- c((podil_sportovci/celkovy_pocet) *100, (podil_treneri/celkovy_pocet) *100, ((celkovy_pocet - (podil_sportovci+podil_treneri)) /celkovy_pocet )*100)
+
+labels <- c(
+  paste("Spolky bez trenérů","(",round(podily[1], 2), "%)"),
+  paste("Spolky bez sportovců", "(", round(podily[2], 2), "%)"),
+  paste("Jiné", "(", round(podily[3], 2), "%)")
+)
+
+
+myPalette <- brewer.pal(5, "Set2") 
+pie(podily, labels = labels, border = "white", col = myPalette)
+
+
+
+#Otázka 3
+sach_bridz <- organizace_overeno %>% filter(str_detect(`Název`, regex("šach|bridž", ignore_case = TRUE)))
+sb_kraj <- sach_bridz %>%
+  group_by(Kraj) %>%
+  summarise(`Celkový počet` = n())
+  
+ggplot(sb_kraj, aes(x = `Kraj`, y = `Celkový počet`, fill = `Kraj`)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Počet 'šach' nebo 'bridž' organizací podle krajů",
+       x = "Kraj",
+       y = "Počet organizací") +
+  theme_minimal() +
+  theme(legend.position = "none")  
+  
+#Úkol 3
 sportovci_filtered <- sportovci  %>% filter(between(`Počet sportovců`, 1, 10000)) %>% filter(between(`Počet trenérů`, 1, 5000))
-
-lr_model <- inner_join(sportovci_filtered, organizace_overeno, by = "IČO")
-
+lr_model <- left_join(organizace_overeno, sportovci_filtered  %>% select(IČO, `Počet sportovců`, `Počet trenérů`), by = "IČO")
 
 # Aplikace lineárního regresního modelu
 model <- lm(`Počet sportovců` ~ `Počet trenérů`, data = lr_model)
-summary(model)
+
+print(model)
 
 # Přidání regresní přímky do grafu
 ggplot(lr_model, aes(x = `Počet trenérů`, y = `Počet sportovců`)) +
@@ -57,3 +110,4 @@ ggplot(lr_model, aes(x = `Počet trenérů`, y = `Počet sportovců`)) +
   labs(title = "Závislost počtu sportovců na počtu trenérů",
        x = "Počet trenérů",
        y = "Počet sportovců")
+       
