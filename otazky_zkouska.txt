@@ -1,0 +1,6 @@
+Škálování dat, normalizace (statisticky)/normalizace (sklearn), standardizace dat
+
+2. Statisticky: Data ve sloupci se snažíme převést na normální rozdělení (Gaussovský zvon)
+   Sklearn:     Vektorové přeškálování
+
+3. Odstraňování střední hodnoty z dat (je rovna nule); rozptyl dat je jedna
