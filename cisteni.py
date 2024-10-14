@@ -20,7 +20,7 @@ d3 = df.fillna(method="ffill")
 
 from sklearn.impute import SimpleImputer
 
-imputer = SimpleImputer
+imputer = SimpleImputer(strategy="mean")
 dfnum = df.select_dtypes(include='number')
 df3 = imputer.fit_transform(dfnum)
 print(df3)

@@ -19,13 +19,17 @@ import re
 
 jmeno = "Tim J. Smith"
 
-print(bool(re.search("[A-Z][a-z]+( ([A-Z][a-z]+)|([A-Z]\\.))? [A-Z][a-z]+", jmeno)))
+#print(bool(re.search("[A-Z][a-z]+(\\s([A-Z]\\.|[A-Z][a-z]+))?\\s[A-Z][a-z]+", jmeno)))
+
 
 #domaci ukol - overeni emailove adresy
 
 s1 = "jmeno@domena.narod"
 s2 = "jmeno.prijmeni@domena.narod"
 
-re.search("^[a-z]", s1)
+pattern = "[a-z]+((\\@[a-z]+)|(\\.[a-z]+\\@[a-z]+))\\.[a-z]+"
+
+print(bool(re.search(pattern, s1)))
+print(bool(re.search(pattern, s2)))
 
 
