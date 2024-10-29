@@ -1,0 +1,56 @@
+---
+title: "Pearsonův test"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Pro Pearsonův test nám poslouží dataset **Steam_2024_bestRevenue_1500.csv**, který obsahuje 1500 nejvýdělečnějších videoher na platformě Steam za rok 2024. 
+```{r}
+data<-read.csv("Steam_2024_bestRevenue_1500.csv")
+```
+
+```{python}
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pingouin as pg
+
+data = pd.read_csv("Steam_2024_bestRevenue_1500.csv")
+```
+
+Ten obsahuje celkem 11 sloupců, přičemž nás budou zajímat dva z nich: **avgPlaytime** (průměrná stravená herní doba) a **revenue** (celkové tržby). Dávalo by smysl, že čím větší je průměrná strávená herní doba, tím větší by byly i celkové tržby, proto musíme zformulovat odpovídající hypotézy:
+
+Nulová hypotéza (H~0~): Neexistuje žádný vztah mezi průměrnou strávenou herní dobou a celkovými tržbami.
+
+Alternativní hypotéza (H~1~): Existuje pozitivní vztah mezi průměrnou strávenou herní dobou a celkovými tržbami.
+
+Jelikož máme dvě kvantitativní parametrické proměnné, využijeme Pearsonův test.
+```{r}
+test <- cor.test(data$avgPlaytime, data$revenue, method = 'pearson')
+test
+```
+
+```{python}
+correlation_test = pg.corr(data['avgPlaytime'], data['revenue'], alternative='two-sided')
+```
+
+Vidíme, že P-hodnota je velmi nízká (0.001398), tudíž nulová hypotéza o neexistenci vztahu mezi proměnnými může být zamítnuta. Samotná hodnota korelace (0.08242598) je pozitivní, tudíž můžeme říct, že hry, které mají delší průměrnou dobu hraní, mají tendenci prodávat více kopií, ale vztah je velmi slabý.
+
+Pro grafické vykreslení dané korelace můžeme využít knihovnu **ggstatsplot** (**seaborn** v případě Pythonu).
+```{r message=FALSE}
+library(ggstatsplot)
+
+ggscatterstats(
+  data = data,
+  x = avgPlaytime ,
+  y = revenue,
+  bf.message = FALSE,
+  marginal = FALSE # remove histograms
+)
+```
+```{python}
+sns.lmplot(x='avgPlaytime', y='revenue', data=data, height=6, aspect=1.5)
+```
+
+
+Ten opět potvrzuje slabou, ale významnou pozitivní korelaci.
