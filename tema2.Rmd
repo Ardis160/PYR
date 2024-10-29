@@ -1,0 +1,150 @@
+---
+title: "Téma 2"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Nejdříve načteme dané knihovny a CSV soubor.
+```{r message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(sf)
+library(tidyr)
+data<-read.csv("NFL Play by Play 2009-2016 (v3).csv")
+```
+
+## Čištění dat
+
+Pomocí **summarise_all** zjistíme, kolik je v každém sloupci NA (chybějících) hodnot.
+```{r}
+missing_values<-data %>% summarise_all(~ sum(is.na(.)))
+print(missing_values)
+```
+
+Následně do sloupce **Date** vložíme údaje z **time**, sloupec přejmenujeme na **DateTime** a sloupec "time" smažeme.
+```{r}
+data$Date <- paste(data$Date, data$time, sep = " ")
+names(data)[names(data) == "Date"] <- "DateTime"
+data$time <- NULL
+```
+
+Pro cenzuru jmen využijeme funkci **str_replace_all** z balíčku ***stringr***. Dataset bohužel není příliš konzistentní se zápisem jmen, tudíž následující regulární výraz nepokrývá úplně všechny možnosti, které se v něm vyskytují; stále se však jedná o většinu záznamů. Budou zcenzurovány všechny řetězce, kde Velkou iniciálu následuje tečka. a po ní buď příjmení (popřípadě prostřední jméno a až pak příjmení), anebo mezera, a až pak příjmení. Stejně tak to platí o případy, kdy je zaznamenáno hráčovo číslo ve tvaru **"#ČÍSLO"** a dále jeho příjmení ve velkých písmenech.
+```{r}
+data$desc <- str_replace_all(data$desc, "([A-Z]\\.[A-Z][a-z]+(\\s[A-Z][a-z]+)?)|(#[0-9]+\\s(([A-Z]+\\s[A-Z]+)|([A-Z][a-z]+)|([A-Z]\\.\\s?[A-Z][a-z]+)))", "CENZUROVÁNO")
+```
+
+Výběr strategie pak hledá takové řetězce v závorkách, které neobsahují čísla ve tvaru **"ČÍSLO:ČÍSLO"** anebo **":ČÍSLO"**, řetězec **"CENZUROVÁNO"**, anebo daný řetězec z předchozího kroku.
+```{r}
+data$Strategy <- str_extract(data$desc, "\\((?!(([0-9]+)?\\:[0-9]+)|(CENZUROVÁNO)|([A-Z]\\.[A-Z][a-z]+(\\s[A-Z][a-z]+)?)|(#[0-9]+\\s(([A-Z]+\\s[A-Z]+)|([A-Z][a-z]+)|([A-Z]\\.\\s?[A-Z][a-z]+))))[^)]*\\)") 
+```
+
+Při ořezu dat o řádky, které ve sloupci **"Strategy"** nemají hodnoty, zjistíme počet řádků před a po odstranění chybějících hodnot, a následně si tento procentuální výsledek vypíšeme; zjistíme, že se přišlo o více než 55 % dat.
+```{r}
+rows_before_delete <- data %>% nrow()
+rows_after_delete <- data %>% drop_na(Strategy) %>% nrow()
+print(((rows_before_delete - rows_after_delete)/rows_before_delete)*100)
+```
+
+Nyní stejný ořez provede pro sloupce. Opět zjistíme počet sloupců před a po. V tomto případě vidíme, že jsme přišli o necelých 57 % dat.
+```{r}
+cols_before_delete <- data %>% ncol()
+data2 <- data %>% select_if(~ !any(is.na(.)))
+cols_after_delete <- data2 %>% ncol()
+print(((cols_before_delete - cols_after_delete)/cols_before_delete)*100)
+```
+
+Nyní vytvoříme nové datasety/tabulky, co nahradí chybějící hodnoty. První z nich nahradí všechny chybějící hodnoty nulou, druhá použije dopředné doplňování směrem dolů, a poslední z nich průměrnou hodnotou ve sloupci. Zároveň také odstraníme všechny potenciální duplicitní řádky.
+```{r}
+data3<- data %>% replace(is.na(.), 0) %>% distinct()
+data4<- fill(data, everything(), .direction = "downup") %>% distinct()
+data5<- data  %>%  mutate_if(is.numeric, ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)) %>% distinct()
+```
+
+## Vizualizace dat
+
+Pomocí **is_numeric** vybereme číselné sloupce, a nad nimi provedeme požadovanou statistiku.
+```{r}
+dfnum <- data %>% select_if(is.numeric)
+count_values <- colSums(!is.na(dfnum))
+max_values <- dfnum %>% summarise_all(~ max(., na.rm = TRUE))
+min_values <- dfnum %>% summarise_all(~ min(., na.rm = TRUE))
+mean_values <- colMeans(dfnum)
+sd_values <- dfnum %>% summarise_all(~ sd(., na.rm = TRUE))
+```
+
+Vzhledem k nejmenšímu počtu hodnot jsem usoudil, že nejvíc zasažené jsou následující sloupce:
+
+### FieldGoalDistance, yacWPA & airWPA
+
+Nyní je můžeme vykreslit v párech:
+```{r}
+ggplot(dfnum, aes(x=FieldGoalDistance, y=yacWPA)) + geom_point()
+ggplot(dfnum, aes(x=yacWPA, y=airWPA)) + geom_point()
+ggplot(dfnum, aes(x=airWPA, y=FieldGoalDistance)) + geom_point()
+```
+
+Jelikož nás ale zajímá, jak se na nich projeví strategie řešení chybějících hodnot, vezmeme oné tři tabulky z jedné z předchozích úloh, a vybereme z nich daný sloupec. Výsledky pak spojíme do jednoho datového rámce a přiřadíme jim odpovídající strategii. Toto opakujeme pro všechny tři.
+```{r}
+field_goal <- bind_rows(
+  data3 %>% select(FieldGoalDistance) %>% mutate(Strategy = "Nahrazení nulou"),
+  data4 %>% select(FieldGoalDistance) %>% mutate(Strategy = "Dopředné doplnění"),
+  data5 %>% select(FieldGoalDistance ) %>% mutate(Strategy = "Nahrazení průměrem")
+)
+yacWPA <- bind_rows(
+  data3 %>% select(yacWPA) %>% mutate(Strategy = "Nahrazení nulou"),
+  data4 %>% select(yacWPA) %>% mutate(Strategy = "Dopředné doplnění"),
+  data5 %>% select(yacWPA ) %>% mutate(Strategy = "Nahrazení průměrem")
+)
+airWPA <- bind_rows(
+  data3 %>% select(airWPA) %>% mutate(Strategy = "Nahrazení nulou"),
+  data4 %>% select(airWPA) %>% mutate(Strategy = "Dopředné doplnění"),
+  data5 %>% select(airWPA ) %>% mutate(Strategy = "Nahrazení průměrem")
+)
+```
+
+Nyní již může dojít k vykreslení.
+```{r}
+ggplot(field_goal, aes(x = FieldGoalDistance, fill = Strategy)) +
+  geom_histogram(position = "dodge", bins = 15, alpha = 0.6) +
+  labs(title = "Různé strategie pro doplnění NA hodnot FieldGoalDistance",
+       x = "FieldGoal Distance", y = "Počet výskytů") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+
+ggplot(yacWPA, aes(x = yacWPA, fill = Strategy)) +
+  geom_histogram(position = "dodge", bins = 15, alpha = 0.6) +
+  labs(title = "Různé strategie pro doplnění NA hodnot yacWPA",
+       x = "FieldGoal Distance", y = "Počet výskytů") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+  
+ggplot(airWPA, aes(x = airWPA, fill = Strategy)) +
+  geom_histogram(position = "dodge", bins = 15, alpha = 0.6) +
+  labs(title = "Různé strategie pro doplnění NA hodnot airWPA",
+       x = "FieldGoal Distance", y = "Počet výskytů") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")  
+```
+
+Pro snadnější zacházení se strategiemi pro ně vytvoříme nový dataframe, který bude obsahovat jejich název a odpovídající celkový počet využití. Kvůli velkému počtu dat a nízké konzistentnosti ve způsobu zápisu dat se výběr omezí na TOP12. 
+```{r}
+strategies <- data.frame(data$Strategy)
+colnames(strategies) <- "Strategy"
+strategies <- strategies %>%
+  group_by(Strategy) %>%
+  summarise(`Počet výskytů` = n()) %>%
+  arrange(desc(`Počet výskytů`)) 
+strategies <- strategies %>%  slice_max(`Počet výskytů`, n = 12)  
+```
+
+Nyní se již tento dataframe může vykreslit pomocí koláčového grafu, jenž ukáže podíl každé zvolené strategie.
+```{r}
+ggplot(strategies, aes(x = "", y = `Počet výskytů`, fill = Strategy)) +
+  geom_col(color = "black") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  labs(title = "Využití herních strategií") +
+  scale_fill_brewer(palette = "Set3")
+```  
+
+Můžeme si tak povšimnout, že většina záznamů neměla danou strategii. Z těch, co měli, je pak nejvíce zastoupena strategie **Shotgun**, tvořící více než třetinu celkových záznamů. Zbytek je pak zastoupen relativně poskrovnu, v některých případech se jedná i kombinace Shotgun spolu s jinačí strategií (např. **No Huddle**).
