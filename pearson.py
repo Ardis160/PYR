@@ -3,13 +3,12 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pingouin as pg
 
-data = pd.read_csv("Steam_2024_bestRevenue_1500.csv")
-
-sns.lmplot(x='avgPlaytime', y='revenue', data=data, height=6, aspect=1.5)
-plt.title('Scatter plot of Avg Playtime vs Revenue')
-plt.xlabel('Average Playtime')
-plt.ylabel('Revenue')
+data = pd.read_csv("data.csv")
+cor_test = pg.corr(data['year'], data['popularity'], method='pearson')
+sns.lmplot(x='year', y='popularity', data=data, height=6, aspect=1.5,
+           line_kws={'color': 'red'},   # Červená barva čáry
+           scatter_kws={'color': 'blue', 'alpha': 0.6})
 plt.show()
-
-correlation_test = pg.corr(data['avgPlaytime'], data['revenue'], alternative='two-sided')
-print(correlation_test)
+corr_matrix = data.select_dtypes(include='number').corr()
+sns.heatmap(corr_matrix, annot=True, fmt='.2f')
+plt.show()
